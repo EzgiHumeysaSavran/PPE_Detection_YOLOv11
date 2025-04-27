@@ -5,8 +5,18 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 import threading
 from queue import Queue
+import winsound
+import time
 
 model = YOLO(r'..\runs\detect\train5\weights\best.pt')
+
+last_alert_time = {}
+
+def play_sound(alert_type, frequency, duration):
+    current_time = time.time()
+    if alert_type not in last_alert_time or (current_time - last_alert_time[alert_type] > 3):
+        last_alert_time[alert_type] = current_time
+        threading.Thread(target=winsound.Beep, args=(frequency, duration), daemon=True).start()
 
 def process_camera(cam_id, frame_queue):
     cap = cv2.VideoCapture(cam_id)
@@ -42,12 +52,25 @@ def process_camera(cam_id, frame_queue):
                             vest_detected = True
                             cv2.rectangle(frame, (ox1, oy1), (ox2, oy2), (0, 255, 0), 2)
 
-                # Sadece kutular çizilecek, uyarı yazısı gösterilmeyecek (ilk versiyon diye)
-                color = (0, 255, 0) if helmet_detected and vest_detected else (0, 0, 255)
+                alert_message = ""
+                if not helmet_detected and not vest_detected:
+                    alert_message = "Uyari: no helmet, no vest"
+                    color = (0, 0, 255)
+                    play_sound("no_helmet_no_vest", 1000, 500)
+                elif not helmet_detected:
+                    alert_message = "Uyari: no helmet"
+                    color = (0, 0, 255)
+                    play_sound("no_helmet", 1200, 500)
+                elif not vest_detected:
+                    alert_message = "Uyari: no vest"
+                    color = (0, 0, 255)
+                    play_sound("no_vest", 800, 500)
+                else:
+                    color = (0, 255, 0)
 
                 text_position = (x1 + 10, y1 - 10) if y1 > 20 else (x1 + 10, y1 + 20)
-                if not helmet_detected or not vest_detected:
-                    cv2.putText(frame, "Eksik Ekipman", text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                if alert_message:
+                    cv2.putText(frame, alert_message, text_position, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
         frame = cv2.resize(frame, (500, 500))
